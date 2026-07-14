@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Pulse</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#0E1621; overscroll-behavior:none; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  #root { height:100%; }
+  ::-webkit-scrollbar { width:0; height:0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useRef, useEffect } = React;
+
+const ACCENT = "#3B9EFF";
+const BG = "#0E1621";
+const BG_CHAT = "#182533";
+const BUBBLE_OUT = "#2B5278";
+const BUBBLE_IN = "#212D3B";
+const TEXT = "#E8ECF1";
+const SUBTEXT = "#7C8A9A";
+
+const defaultProfile = { name: "Ты", username: "@my_pulse", status: "Живу на связи 24/7", avatarColor: "#F5A623" };
+
+const initialChats = [
+  { id:"c0", name:"Pulse", avatarColor: ACCENT, lastSeen:"официальный аккаунт", pinned:true, verified:true,
+    messages:[{id:1, from:"them", text:"Добро пожаловать в Pulse! 👋 Рады видеть тебя здесь.", time:"09:00", read:true}] },
+  { id:"c1", name:"Настя", avatarColor:"#FF6B81", lastSeen:"была недавно", pinned:true,
+    messages:[
+      {id:1, from:"them", text:"Привет! Как дела?", time:"10:02", read:true},
+      {id:2, from:"me", text:"Норм, готовлю проект 👀", time:"10:03", read:true},
+      {id:3, from:"them", text:"Круто, покажешь потом?", time:"10:04", read:true},
+    ]},
+  { id:"c2", name:"Рабочий чат", avatarColor:"#4CC9A0", lastSeen:"3 участника", pinned:false,
+    messages:[
+      {id:1, from:"them", text:"Созвон переносится на 15:00", time:"09:20", read:true},
+      {id:2, from:"me", text:"Принял", time:"09:21", read:true},
+    ]},
+  { id:"c3", name:"Дима", avatarColor:"#9B7EDE", lastSeen:"в сети", pinned:false,
+    messages:[{id:1, from:"them", text:"го в игру вечером?", time:"08:45", read:false}] },
+];
+
+function Avatar({ name, color, size=48 }) {
+  const initial = name.trim()[0]?.toUpperCase() || "?";
+  return <div style={{width:size,height:size,borderRadius:"50%",background:color,display:"flex",
+    alignItems:"center",justifyContent:"center",color:"white",fontWeight:600,fontSize:size*0.42,flexShrink:0}}>{initial}</div>;
+}
+
+function ChatListItem({ chat, onClick }) {
+  const lastMsg = chat.messages[chat.messages.length-1];
+  const unread = chat.messages.filter(m=>m.from==="them" && !m.read).length;
+  return (
+    <div onClick={onClick} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",
+      cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+      <Avatar name={chat.name} color={chat.avatarColor} />
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+          <span style={{display:"flex",alignItems:"center",gap:4,color:TEXT,fontWeight:600,fontSize:15.5}}>
+            {chat.name}{chat.verified && <span style={{color:ACCENT,fontSize:13}}>✔</span>}
+          </span>
+          <span style={{color:SUBTEXT,fontSize:12}}>{lastMsg?.time}</span>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:2}}>
+          <span style={{color:SUBTEXT,fontSize:13.5,whiteSpace:"nowrap",overflow:"hidden",
+            textOverflow:"ellipsis",maxWidth:220}}>
+            {lastMsg?.from==="me" ? "Вы: " : ""}{lastMsg?.text}
+          </span>
+          {unread>0 && <span style={{background:ACCENT,color:"white",fontSize:11.5,fontWeight:700,
+            borderRadius:999,minWidth:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",
+            padding:"0 6px"}}>{unread}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Bubble({ msg }) {
+  const isMe = msg.from==="me";
+  return (
+    <div style={{display:"flex",justifyContent:isMe?"flex-end":"flex-start",padding:"3px 12px"}}>
+      <div style={{background:isMe?BUBBLE_OUT:BUBBLE_IN,color:TEXT,padding:"7px 10px",borderRadius:14,
+        borderBottomRightRadius:isMe?4:14,borderBottomLeftRadius:isMe?14:4,maxWidth:"78%",fontSize:15,
+        lineHeight:1.35,boxShadow:"0 1px 2px rgba(0,0,0,0.2)"}}>
+        <span>{msg.text}</span>
+        <div style={{display:"inline-flex",alignItems:"center",gap:3,float:"right",marginLeft:8,
+          marginTop:4,fontSize:11,color:isMe?"rgba(255,255,255,0.65)":SUBTEXT}}>
+          {msg.time}{isMe && (msg.read ? "✓✓" : "✓")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatView({ chat, onBack, onSend }) {
+  const [draft, setDraft] = useState("");
+  const bottomRef = useRef(null);
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [chat.messages.length]);
+  const send = () => { const t=draft.trim(); if(!t) return; onSend(chat.id, t); setDraft(""); };
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:BG_CHAT}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"#1F2A38",
+        borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        <span onClick={onBack} style={{color:TEXT,fontSize:22,cursor:"pointer"}}>←</span>
+        <Avatar name={chat.name} color={chat.avatarColor} size={38} />
+        <div style={{flex:1}}>
+          <div style={{color:TEXT,fontWeight:600,fontSize:15.5}}>{chat.name}{chat.verified && <span style={{color:ACCENT}}> ✔</span>}</div>
+          <div style={{color:SUBTEXT,fontSize:12.5}}>{chat.lastSeen}</div>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"10px 0"}}>
+        {chat.messages.map(m => <Bubble key={m.id} msg={m} />)}
+        <div ref={bottomRef} />
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#1F2A38",
+        borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+        <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()}
+          placeholder="Сообщение" style={{flex:1,background:"#0E1621",border:"none",outline:"none",color:TEXT,
+          borderRadius:20,padding:"9px 14px",fontSize:15}} />
+        <div onClick={send} style={{width:36,height:36,borderRadius:"50%",background:ACCENT,display:"flex",
+          alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,color:"white"}}>➤</div>
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({ view, setView }) {
+  const items = [ {key:"chats",label:"Чаты",icon:"💬"}, {key:"contacts",label:"Контакты",icon:"👥"}, {key:"settings",label:"Настройки",icon:"⚙️"} ];
+  return (
+    <div style={{display:"flex",borderTop:"1px solid rgba(255,255,255,0.06)",background:"#111C28"}}>
+      {items.map(({key,label,icon})=>{
+        const active = view===key;
+        return (
+          <div key={key} onClick={()=>setView(key)} style={{flex:1,display:"flex",flexDirection:"column",
+            alignItems:"center",gap:2,padding:"8px 0 10px",cursor:"pointer"}}>
+            <span style={{fontSize:20,opacity:active?1:0.6}}>{icon}</span>
+            <span style={{fontSize:11,color:active?ACCENT:SUBTEXT}}>{label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScreenHeader({ title }) {
+  return <div style={{padding:"14px 14px 10px",background:BG}}><span style={{color:TEXT,fontSize:22,fontWeight:700}}>{title}</span></div>;
+}
+
+function ContactsScreen({ chats, onOpenChat }) {
+  const contacts = chats.filter(c=>c.id!=="c0");
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:BG}}>
+      <ScreenHeader title="Контакты" />
+      <div style={{flex:1,overflowY:"auto"}}>
+        {contacts.map(c=>(
+          <div key={c.id} onClick={()=>onOpenChat(c.id)} style={{display:"flex",alignItems:"center",gap:12,
+            padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+            <Avatar name={c.name} color={c.avatarColor} size={42} />
+            <div style={{flex:1}}>
+              <div style={{color:TEXT,fontWeight:600,fontSize:15}}>{c.name}</div>
+              <div style={{color:SUBTEXT,fontSize:12.5}}>{c.lastSeen}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsRow({ icon, label, value }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",
+      borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+      <span style={{fontSize:18}}>{icon}</span>
+      <span style={{color:TEXT,fontSize:15,flex:1}}>{label}</span>
+      {value && <span style={{color:SUBTEXT,fontSize:13.5}}>{value}</span>}
+    </div>
+  );
+}
+
+function SettingsScreen({ profile, onOpenProfile }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:BG}}>
+      <ScreenHeader title="Настройки" />
+      <div onClick={onOpenProfile} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",
+        cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+        <Avatar name={profile.name} color={profile.avatarColor} size={54} />
+        <div style={{flex:1}}>
+          <div style={{color:TEXT,fontWeight:600,fontSize:16.5}}>{profile.name}</div>
+          <div style={{color:SUBTEXT,fontSize:13.5}}>{profile.username}</div>
+        </div>
+        <span style={{color:SUBTEXT}}>›</span>
+      </div>
+      <div style={{marginTop:14}}>
+        <SettingsRow icon="🔔" label="Уведомления" value="Включены" />
+        <SettingsRow icon="🔒" label="Приватность" value="По умолчанию" />
+        <SettingsRow icon="🎨" label="Тема" value="Тёмная" />
+        <SettingsRow icon="ℹ️" label="О Pulse" value="v0.1" />
+      </div>
+    </div>
+  );
+}
+
+function ProfileScreen({ profile, onSave, onBack }) {
+  const [name, setName] = useState(profile.name);
+  const [status, setStatus] = useState(profile.status);
+  const inputStyle = {width:"100%",background:"#1B2733",border:"none",outline:"none",color:TEXT,
+    borderRadius:10,padding:"10px 12px",fontSize:15,marginTop:6};
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",background:BG}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px"}}>
+        <span onClick={onBack} style={{color:TEXT,fontSize:22,cursor:"pointer"}}>←</span>
+        <span style={{color:TEXT,fontSize:18,fontWeight:700}}>Профиль</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",padding:"16px 0 8px"}}>
+        <Avatar name={name} color={profile.avatarColor} size={96} />
+      </div>
+      <div style={{padding:"16px 16px 0"}}>
+        <label style={{color:SUBTEXT,fontSize:12.5}}>Имя</label>
+        <input style={inputStyle} value={name} onChange={e=>setName(e.target.value)} />
+      </div>
+      <div style={{padding:"16px 16px 0"}}>
+        <label style={{color:SUBTEXT,fontSize:12.5}}>О себе</label>
+        <input style={inputStyle} value={status} onChange={e=>setStatus(e.target.value)} />
+      </div>
+      <div style={{padding:"16px 16px 0"}}>
+        <label style={{color:SUBTEXT,fontSize:12.5}}>Юзернейм</label>
+        <div style={{...inputStyle,color:SUBTEXT}}>{profile.username}</div>
+      </div>
+      <div style={{padding:"24px 16px"}}>
+        <div onClick={()=>{ onSave({...profile,name,status}); onBack(); }} style={{background:ACCENT,
+          color:"white",textAlign:"center",padding:"12px 0",borderRadius:12,fontWeight:600,cursor:"pointer"}}>
+          Сохранить
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Messenger() {
+  const [chats, setChats] = useState(initialChats);
+  const [activeId, setActiveId] = useState(null);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState("chats");
+  const [profile, setProfile] = useState(defaultProfile);
+  const activeChat = chats.find(c=>c.id===activeId);
+  const openChat = (id) => { setActiveId(id); setView("chats"); };
+
+  const handleSend = (chatId, text) => {
+    setChats(prev => prev.map(c=>{
+      if (c.id!==chatId) return c;
+      const time = new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+      return {...c, messages:[...c.messages, {id:c.messages.length+1, from:"me", text, time, read:false}]};
+    }));
+    setTimeout(()=>{
+      setChats(prev => prev.map(c=>{
+        if (c.id!==chatId) return c;
+        const time = new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});
+        const replies = ["Ага, понял 👍","Хах, класс","Окей!","Договорились","😂😂"];
+        const reply = replies[Math.floor(Math.random()*replies.length)];
+        const readMsgs = c.messages.map(m=> m.from==="me" ? {...m, read:true} : m);
+        return {...c, messages:[...readMsgs, {id:readMsgs.length+1, from:"them", text:reply, time, read:true}]};
+      }));
+    }, 1400);
+  };
+
+  const filteredChats = chats.filter(c=>c.name.toLowerCase().includes(query.toLowerCase()))
+    .sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0));
+
+  const showNav = !activeChat && view!=="profile";
+  let body;
+  if (activeChat) body = <ChatView chat={activeChat} onBack={()=>setActiveId(null)} onSend={handleSend} />;
+  else if (view==="contacts") body = <ContactsScreen chats={chats} onOpenChat={openChat} />;
+  else if (view==="settings") body = <SettingsScreen profile={profile} onOpenProfile={()=>setView("profile")} />;
+  else if (view==="profile") body = <ProfileScreen profile={profile} onSave={setProfile} onBack={()=>setView("settings")} />;
+  else body = (
+    <React.Fragment>
+      <div style={{padding:"14px 14px 8px",background:BG}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <span style={{color:TEXT,fontSize:22,fontWeight:700}}>Pulse</span>
+          <span style={{color:SUBTEXT,fontSize:13}}>чаты</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"#1B2733",borderRadius:10,padding:"8px 10px"}}>
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск"
+            style={{flex:1,background:"transparent",border:"none",outline:"none",color:TEXT,fontSize:14.5}} />
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto"}}>
+        {filteredChats.map(c => <ChatListItem key={c.id} chat={c} onClick={()=>setActiveId(c.id)} />)}
+      </div>
+    </React.Fragment>
+  );
+
+  return (
+    <div style={{width:"100%",height:"100%",background:BG,display:"flex",flexDirection:"column",
+      fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"}}>
+      <div style={{flex:1,minHeight:0,display:"flex",flexDirection:"column"}}>{body}</div>
+      {showNav && <BottomNav view={view} setView={setView} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Messenger />);
+</script>
+</body>
+</html>
