@@ -1,0 +1,7 @@
+{
+  "appId": "com.pulse.messenger",
+  "appName": "Pulse",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "backgroundColor": "#0E1621"
+}
